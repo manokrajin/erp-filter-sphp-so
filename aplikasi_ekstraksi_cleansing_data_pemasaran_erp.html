@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP Data Extractor & Cleansing — Marketing Ops</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- PapaParse untuk parsing CSV cepat & akurat -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- SheetJS (XLSX) untuk baca & ekspor file Excel/CSV -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-600 text-white p-2 rounded-xl shadow-sm">
+                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">ERP Sales Data Extractor</h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">Pembersihan Otomatis, Filter & Ekspor 5 Kolom Standar Pemasaran</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="btnLoadSample" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer">
+                    <i data-lucide="database" class="w-4 h-4 text-brand-600"></i>
+                    <span>Muat Data Contoh</span>
+                </button>
+                <label for="fileInputTop" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-sm transition cursor-pointer">
+                    <i data-lucide="upload" class="w-4 h-4"></i>
+                    <span>Unggah File ERP</span>
+                    <input id="fileInputTop" type="file" accept=".csv,.xlsx,.xls" class="hidden" />
+                </label>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Toast Notification Box (Pengganti alert()) -->
+        <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+        <!-- Empty State / Dropzone Area -->
+        <section id="emptyStateSection" class="bg-white border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-8 sm:p-14 text-center transition-all duration-200 shadow-sm">
+            <div id="dropZone" class="max-w-xl mx-auto flex flex-col items-center">
+                <div class="w-16 h-16 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mb-4">
+                    <i data-lucide="file-spreadsheet" class="w-8 h-8"></i>
+                </div>
+                <h2 class="text-xl font-bold text-slate-900 mb-2">Unggah Dataset Penjualan ERP Anda</h2>
+                <p class="text-sm text-slate-500 mb-6 leading-relaxed">
+                    Tarik & lepas file <span class="font-semibold text-slate-700">.CSV</span> atau <span class="font-semibold text-slate-700">.XLSX</span> (seperti <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">data (65).csv</code>) ke area ini. 
+                    Sistem otomatis menghapus baris <em>Total</em> & metadata filter, memperbaiki spasi ganda nama mitra, dan menstandarkan tanggal.
+                </p>
+                <div class="flex flex-wrap items-center justify-center gap-3">
+                    <label for="fileInputMain" class="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-sm transition cursor-pointer">
+                        <i data-lucide="folder-open" class="w-4 h-4"></i>
+                        <span>Pilih File dari Komputer</span>
+                        <input id="fileInputMain" type="file" accept=".csv,.xlsx,.xls" class="hidden" />
+                    </label>
+                    <button id="btnLoadSampleHero" type="button" class="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition cursor-pointer">
+                        <i data-lucide="play" class="w-4 h-4 text-brand-600"></i>
+                        <span>Coba dengan Data Contoh</span>
+                    </button>
+                </div>
+                <p class="text-xs text-slate-400 mt-5 flex items-center justify-center gap-1.5">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+                    <span>100% diproses di browser Anda — data penjualan tidak pernah dikirim ke server mana pun.</span>
+                </p>
+            </div>
+        </section>
+
+        <!-- Workspace Section (Hidden until data is loaded) -->
+        <div id="workspaceSection" class="hidden space-y-6">
+
+            <!-- Data Cleansing Audit Banner -->
+            <section class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div class="flex items-start gap-3.5">
+                    <div class="bg-emerald-600 text-white p-2 rounded-xl shrink-0 mt-0.5">
+                        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h3 class="text-sm font-bold text-emerald-950">Auto-Cleansing Selesai</h3>
+                            <span id="fileNameBadge" class="text-xs font-medium bg-white text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full">data.csv</span>
+                        </div>
+                        <p id="auditSummaryText" class="text-xs sm:text-sm text-emerald-800 mt-1">
+                            Memproses baris data...
+                        </p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <span id="badgeRowsRaw" class="text-xs font-semibold bg-white text-slate-700 border border-emerald-200 px-3 py-1.5 rounded-xl">0 Baris Mentah</span>
+                    <span id="badgeRowsRemoved" class="text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200 px-3 py-1.5 rounded-xl">0 Footer Dihapus</span>
+                    <span id="badgeSpacesFixed" class="text-xs font-semibold bg-blue-100 text-blue-900 border border-blue-200 px-3 py-1.5 rounded-xl">0 Spasi Diperbaiki</span>
+                </div>
+            </section>
+
+            <!-- Interactive Filter & Configuration Panel -->
+            <section class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="sliders-horizontal" class="w-5 h-5 text-brand-600"></i>
+                        <h2 class="text-base font-bold text-slate-900">Filter Data & Konfigurasi Kolom Ekspor</h2>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs text-slate-500 font-medium">Preset Tanggal:</span>
+                        <button type="button" data-preset="all" class="preset-btn px-2.5 py-1 text-xs font-medium rounded-lg bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 transition cursor-pointer">Semua</button>
+                        <button type="button" data-preset="lastMonth" class="preset-btn px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">Bulan Terakhir</button>
+                        <button type="button" data-preset="last7Days" class="preset-btn px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">7 Hari Terakhir</button>
+                        <button id="btnResetFilter" type="button" class="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition cursor-pointer ml-1">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                            <span>Reset Filter</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Tanggal Mulai -->
+                    <div>
+                        <label for="filterStartDate" class="block text-xs font-semibold text-slate-700 mb-1.5">Tanggal Mulai (SO)</label>
+                        <input type="date" id="filterStartDate" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                    </div>
+
+                    <!-- Tanggal Akhir -->
+                    <div>
+                        <label for="filterEndDate" class="block text-xs font-semibold text-slate-700 mb-1.5">Tanggal Akhir (SO)</label>
+                        <input type="date" id="filterEndDate" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                    </div>
+
+                    <!-- Kabupaten / Kota -->
+                    <div>
+                        <label for="filterKabupaten" class="block text-xs font-semibold text-slate-700 mb-1.5">Kabupaten / Kota</label>
+                        <select id="filterKabupaten" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                            <option value="">Semua Kabupaten/Kota</option>
+                        </select>
+                    </div>
+
+                    <!-- Saluran Distribusi -->
+                    <div>
+                        <label for="filterSaluran" class="block text-xs font-semibold text-slate-700 mb-1.5">Saluran Distribusi</label>
+                        <select id="filterSaluran" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                            <option value="">Semua Saluran Distribusi</option>
+                        </select>
+                    </div>
+
+                    <!-- Gudang -->
+                    <div>
+                        <label for="filterGudang" class="block text-xs font-semibold text-slate-700 mb-1.5">Gudang</label>
+                        <select id="filterGudang" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                            <option value="">Semua Gudang</option>
+                        </select>
+                    </div>
+
+                    <!-- Status Pengiriman -->
+                    <div>
+                        <label for="filterStatusKirim" class="block text-xs font-semibold text-slate-700 mb-1.5">Status Realisasi Kirim</label>
+                        <select id="filterStatusKirim" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                            <option value="">Semua Status</option>
+                            <option value="terkirim">Terkirim Penuh (Kuantum > 0)</option>
+                            <option value="belum">Belum Terkirim (Kuantum = 0)</option>
+                        </select>
+                    </div>
+
+                    <!-- Pilihan Satuan Jumlah Pembelian -->
+                    <div>
+                        <label for="unitSelector" class="block text-xs font-semibold text-slate-700 mb-1.5">Sumber "Jumlah Pembelian"</label>
+                        <select id="unitSelector" class="w-full px-3 py-2 text-sm font-medium text-brand-900 bg-brand-50 border border-brand-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+                            <option value="kuantum_kg">Kuantum SO (Kg)</option>
+                            <option value="kuantum_koli">Kuantum Koli SO (Koli)</option>
+                            <option value="terkirim_kg">Kuantum Terkirim (Kg)</option>
+                        </select>
+                    </div>
+
+                    <!-- Pencarian Nama Mitra atau No SO -->
+                    <div>
+                        <label for="filterSearch" class="block text-xs font-semibold text-slate-700 mb-1.5">Cari Nama Mitra / Nomor SO</label>
+                        <div class="relative">
+                            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                            <input type="text" id="filterSearch" placeholder="Ketik nama mitra atau SO..." class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Live KPI Summary Cards -->
+            <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 mb-1">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Transaksi Terfilter</span>
+                        <i data-lucide="receipt" class="w-4 h-4 text-brand-600"></i>
+                    </div>
+                    <div id="kpiTotalRows" class="text-2xl font-bold text-slate-900">0</div>
+                    <p id="kpiRowsSub" class="text-xs text-slate-500 mt-1">dari 0 total baris bersih</p>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 mb-1">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Mitra Unik</span>
+                        <i data-lucide="store" class="w-4 h-4 text-indigo-600"></i>
+                    </div>
+                    <div id="kpiUniqueMitra" class="text-2xl font-bold text-slate-900">0</div>
+                    <p class="text-xs text-slate-500 mt-1">outlet / RPK aktif bertransaksi</p>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 mb-1">
+                        <span id="kpiQtyLabel" class="text-xs font-semibold uppercase tracking-wider">Total Jumlah (Kg)</span>
+                        <i data-lucide="package" class="w-4 h-4 text-emerald-600"></i>
+                    </div>
+                    <div id="kpiTotalQty" class="text-2xl font-bold text-slate-900">0</div>
+                    <p id="kpiQtySub" class="text-xs text-slate-500 mt-1">Setara 0 Koli</p>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 mb-1">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Total Nominal Invoice</span>
+                        <i data-lucide="banknote" class="w-4 h-4 text-amber-600"></i>
+                    </div>
+                    <div id="kpiTotalNominal" class="text-xl sm:text-2xl font-bold text-slate-900 truncate">Rp 0</div>
+                    <p class="text-xs text-slate-500 mt-1">Nilai setelah pajak</p>
+                </div>
+            </section>
+
+            <!-- Preview & Export Table Section -->
+            <section class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                <!-- Table Header & Export Actions -->
+                <div class="p-5 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/60">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-base font-bold text-slate-900">Pratinjau Hasil Ekstraksi (5 Kolom Output)</h2>
+                            <span class="text-xs font-medium bg-brand-100 text-brand-800 px-2.5 py-0.5 rounded-full">Siap Ekspor</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">
+                            Kolom output dikunci menjadi: <span class="font-semibold text-slate-700">Tanggal</span>, <span class="font-semibold text-slate-700">Nomor SO</span>, <span class="font-semibold text-slate-700">Nama Mitra</span>, <span class="font-semibold text-slate-700">Jumlah Pembelian</span>, dan <span class="font-semibold text-slate-700">Keterangan</span> (dapat diketik langsung di tabel).
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                        <button id="btnExportCSV" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl shadow-sm transition cursor-pointer">
+                            <i data-lucide="file-text" class="w-4 h-4 text-slate-600"></i>
+                            <span>Ekspor CSV (.csv)</span>
+                        </button>
+                        <button id="btnExportXLSX" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition cursor-pointer">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            <span>Ekspor Excel (.xlsx)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Responsive Table Wrapper -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                <th class="py-3.5 px-4 w-12 text-center">#</th>
+                                <th class="py-3.5 px-4 w-36">Tanggal</th>
+                                <th class="py-3.5 px-4 w-44">Nomor SO</th>
+                                <th class="py-3.5 px-4 min-w-[220px]">Nama Mitra</th>
+                                <th id="thJumlahPembelian" class="py-3.5 px-4 w-44 text-right">Jumlah Pembelian (Kg)</th>
+                                <th class="py-3.5 px-4 min-w-[200px]">Keterangan <span class="font-normal lowercase text-slate-400">(opsional)</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Rows rendered via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty Filter Result Message -->
+                <div id="noFilterMatchState" class="hidden py-12 px-4 text-center">
+                    <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i data-lucide="search-x" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800">Tidak ada data yang cocok dengan filter</h3>
+                    <p class="text-xs text-slate-500 mt-1">Coba ubah rentang tanggal atau klik tombol Reset Filter untuk menampilkan kembali semua data.</p>
+                </div>
+
+                <!-- Pagination Controls -->
+                <div id="paginationBar" class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                    <div class="flex items-center gap-2">
+                        <span>Tampilkan</span>
+                        <select id="pageSizeSelect" class="bg-white border border-slate-300 rounded-lg px-2 py-1 font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="15">15</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="250">250</option>
+                        </select>
+                        <span id="paginationInfo">Menampilkan 0 - 0 dari 0 baris</span>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <button id="btnPrevPage" type="button" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer">
+                            Sebelumnya
+                        </button>
+                        <span id="pageIndicator" class="px-3 py-1.5 font-semibold text-slate-800">Hal 1 / 1</span>
+                        <button id="btnNextPage" type="button" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer">
+                            Berikutnya
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <p>ERP Sales Data Cleansing & Extractor — Siap untuk GitHub Pages</p>
+            <p>Format Output: <span class="font-mono text-slate-700">Tanggal | Nomor SO | Nama Mitra | Jumlah Pembelian | Keterangan</span></p>
+        </div>
+    </footer>
+
+    <!-- Application Logic -->
+    <script>
+        // Inisialisasi ikon Lucide
+        lucide.createIcons();
+
+        // State Utama Aplikasi
+        const state = {
+            fileName: '',
+            rawRowCount: 0,
+            removedFooterCount: 0,
+            whitespaceFixedCount: 0,
+            cleanedData: [],      // Seluruh baris valid hasil pembersihan
+            filteredData: [],     // Baris setelah diterapkan filter UI
+            currentPage: 1,
+            pageSize: 15,
+            selectedUnit: 'kuantum_kg', // 'kuantum_kg' | 'kuantum_koli' | 'terkirim_kg'
+            minDateInData: '',
+            maxDateInData: ''
+        };
+
+        // Referensi Elemen DOM
+        const els = {
+            emptyStateSection: document.getElementById('emptyStateSection'),
+            workspaceSection: document.getElementById('workspaceSection'),
+            dropZone: document.getElementById('dropZone'),
+            fileInputTop: document.getElementById('fileInputTop'),
+            fileInputMain: document.getElementById('fileInputMain'),
+            btnLoadSample: document.getElementById('btnLoadSample'),
+            btnLoadSampleHero: document.getElementById('btnLoadSampleHero'),
+            
+            // Audit Banner
+            fileNameBadge: document.getElementById('fileNameBadge'),
+            auditSummaryText: document.getElementById('auditSummaryText'),
+            badgeRowsRaw: document.getElementById('badgeRowsRaw'),
+            badgeRowsRemoved: document.getElementById('badgeRowsRemoved'),
+            badgeSpacesFixed: document.getElementById('badgeSpacesFixed'),
+
+            // Filters
+            filterStartDate: document.getElementById('filterStartDate'),
+            filterEndDate: document.getElementById('filterEndDate'),
+            filterKabupaten: document.getElementById('filterKabupaten'),
+            filterSaluran: document.getElementById('filterSaluran'),
+            filterGudang: document.getElementById('filterGudang'),
+            filterStatusKirim: document.getElementById('filterStatusKirim'),
+            unitSelector: document.getElementById('unitSelector'),
+            filterSearch: document.getElementById('filterSearch'),
+            btnResetFilter: document.getElementById('btnResetFilter'),
+
+            // KPIs
+            kpiTotalRows: document.getElementById('kpiTotalRows'),
+            kpiRowsSub: document.getElementById('kpiRowsSub'),
+            kpiUniqueMitra: document.getElementById('kpiUniqueMitra'),
+            kpiQtyLabel: document.getElementById('kpiQtyLabel'),
+            kpiTotalQty: document.getElementById('kpiTotalQty'),
+            kpiQtySub: document.getElementById('kpiQtySub'),
+            kpiTotalNominal: document.getElementById('kpiTotalNominal'),
+
+            // Table & Pagination
+            thJumlahPembelian: document.getElementById('thJumlahPembelian'),
+            previewTableBody: document.getElementById('previewTableBody'),
+            noFilterMatchState: document.getElementById('noFilterMatchState'),
+            paginationBar: document.getElementById('paginationBar'),
+            pageSizeSelect: document.getElementById('pageSizeSelect'),
+            paginationInfo: document.getElementById('paginationInfo'),
+            pageIndicator: document.getElementById('pageIndicator'),
+            btnPrevPage: document.getElementById('btnPrevPage'),
+            btnNextPage: document.getElementById('btnNextPage'),
+
+            // Export
+            btnExportCSV: document.getElementById('btnExportCSV'),
+            btnExportXLSX: document.getElementById('btnExportXLSX'),
+            toastContainer: document.getElementById('toastContainer')
+        };
+
+        /**
+         * Menampilkan notifikasi toast non-intrusif (pengganti alert)
+         */
+        function showToast(message, type = 'info') {
+            const colors = {
+                success: 'bg-emerald-900 text-white border-emerald-700',
+                error: 'bg-rose-900 text-white border-rose-700',
+                info: 'bg-slate-900 text-white border-slate-700'
+            };
+            const iconName = type === 'success' ? 'check-circle' : type === 'error' ? 'alert-circle' : 'info';
+
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl border shadow-lg text-xs sm:text-sm font-medium transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+            toast.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+
+            els.toastContainer.appendChild(toast);
+            lucide.createIcons({ nodes: [toast] });
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        /**
+         * Normalisasi spasi berlebih pada teks dan hitung berapa kali perbaikan terjadi
+         */
+        function normalizeText(val) {
+            if (val === null || val === undefined) return { text: '', fixed: false };
+            const raw = String(val);
+            const cleaned = raw.trim().replace(/\s+/g, ' ');
+            return {
+                text: cleaned,
+                fixed: raw !== cleaned
+            };
+        }
+
+        /**
+         * Parsing tanggal fleksibel (DD/MM/YYYY, YYYY-MM-DD, atau serial number Excel) ke YYYY-MM-DD
+         */
+        function parseDateToISO(rawDate) {
+            if (!rawDate && rawDate !== 0) return '';
+
+            // Jika angka serial tanggal Excel
+            if (typeof rawDate === 'number') {
+                const utcDays = Math.floor(rawDate - 25569);
+                const dateObj = new Date(utcDays * 86400 * 1000);
+                if (!isNaN(dateObj.getTime())) {
+                    return dateObj.toISOString().split('T')[0];
+                }
+            }
+
+            const str = String(rawDate).trim();
+            // Format DD/MM/YYYY atau DD-MM-YYYY
+            const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (dmyMatch) {
+                const day = dmyMatch[1].padStart(2, '0');
+                const month = dmyMatch[2].padStart(2, '0');
+                const year = dmyMatch[3];
+                return `${year}-${month}-${day}`;
+            }
+
+            // Format YYYY-MM-DD atau YYYY/MM/DD
+            const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+            if (ymdMatch) {
+                const year = ymdMatch[1];
+                const month = ymdMatch[2].padStart(2, '0');
+                const day = ymdMatch[3].padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            return str;
+        }
+
+        /**
+         * Parsing angka yang aman dari pemisah ribuan atau string kosong
+         */
+        function parseNumber(val) {
+            if (typeof val === 'number') return isNaN(val) ? 0 : val;
+            if (!val) return 0;
+            const cleaned = String(val).replace(/[^0-9.-]+/g, '');
+            const num = parseFloat(cleaned);
+            return isNaN(num) ? 0 : num;
+        }
+
+        /**
+         * Mencari nilai kolom secara case-insensitive dan toleran terhadap spasi nama header
+         */
+        function getColValue(row, candidates) {
+            const keys = Object.keys(row);
+            for (const candidate of candidates) {
+                const target = candidate.toLowerCase().trim();
+                const foundKey = keys.find(k => k.toLowerCase().trim() === target);
+                if (foundKey !== undefined) {
+                    return row[foundKey];
+                }
+            }
+            return '';
+        }
+
+        /**
+         * Pipeline Utama: Pembersihan Otomatis Dataset Mentah ERP
+         */
+        function processRawRows(rawRows, fileName) {
+            if (!rawRows || rawRows.length === 0) {
+                showToast('File kosong atau tidak memiliki baris data.', 'error');
+                return;
+            }
+
+            let removedFooters = 0;
+            let whitespaceFixes = 0;
+            const cleaned = [];
+
+            rawRows.forEach((row, index) => {
+                const rawNoSO = getColValue(row, ['No SO', 'Nomor SO', 'No_SO']);
+                const rawWilayah = getColValue(row, ['Wilayah']);
+                const rawNamaPembeli = getColValue(row, ['Nama Pembeli', 'Nama Mitra', 'Customer']);
+
+                const noSOCheck = normalizeText(rawNoSO);
+                const wilayahCheck = normalizeText(rawWilayah);
+
+                // Deteksi baris non-transaksi (Footer "Total", baris kosong, atau metadata "Filter diterapkan...")
+                const isFooterOrMetadata =
+                    !noSOCheck.text ||
+                    wilayahCheck.text.toLowerCase() === 'total' ||
+                    wilayahCheck.text.toLowerCase().startsWith('filter diterapkan') ||
+                    noSOCheck.text.toLowerCase() === 'total';
+
+                if (isFooterOrMetadata) {
+                    removedFooters++;
+                    return;
+                }
+
+                // Normalisasi spasi pada Nama Pembeli & kolom teks utama
+                const mitraCheck = normalizeText(rawNamaPembeli);
+                const kabCheck = normalizeText(getColValue(row, ['Kabupaten/Kota', 'Kabupaten', 'Kota']));
+                const saluranCheck = normalizeText(getColValue(row, ['Saluran Distribusi', 'Saluran']));
+                const gudangCheck = normalizeText(getColValue(row, ['Gudang']));
+
+                if (mitraCheck.fixed || noSOCheck.fixed || kabCheck.fixed || saluranCheck.fixed) {
+                    whitespaceFixes++;
+                }
+
+                // Standarisasi Tanggal Konfirmasi SO
+                const rawTglSO = getColValue(row, ['Tanggal Konfirmasi SO', 'Tanggal SO', 'Tanggal']);
+                const tanggalISO = parseDateToISO(rawTglSO);
+
+                // Ekstraksi angka kuantitas & nominal
+                const kuantumKg = parseNumber(getColValue(row, ['Kuantum SO', 'Kuantum (Kg)']));
+                const kuantumKoli = parseNumber(getColValue(row, ['Kuantum Koli SO', 'Kuantum Koli']));
+                const terkirimKg = parseNumber(getColValue(row, ['Kuantum Terkirim']));
+                const nominalInvoice = parseNumber(getColValue(row, ['Nominal Invoice', 'Nominal SO (Setelah Pajak)']));
+
+                cleaned.push({
+                    _uid: index,
+                    tanggal: tanggalISO,
+                    nomor_so: noSOCheck.text,
+                    nama_mitra: mitraCheck.text,
+                    kuantum_kg: kuantumKg,
+                    kuantum_koli: kuantumKoli,
+                    terkirim_kg: terkirimKg,
+                    nominal_invoice: nominalInvoice,
+                    kabupaten: kabCheck.text || 'Tidak Diketahui',
+                    saluran: saluranCheck.text || 'Tidak Diketahui',
+                    gudang: gudangCheck.text || 'Tidak Diketahui',
+                    keterangan: '' // Kolom tambahan kosong sesuai permintaan user
+                });
+            });
+
+            if (cleaned.length === 0) {
+                showToast('Tidak ditemukan baris transaksi valid. Pastikan kolom "No SO" tersedia.', 'error');
+                return;
+            }
+
+            // Simpan ke state
+            state.fileName = fileName;
+            state.rawRowCount = rawRows.length;
+            state.removedFooterCount = removedFooters;
+            state.whitespaceFixedCount = whitespaceFixes;
+            state.cleanedData = cleaned;
+
+            // Tentukan rentang tanggal min & max dari data
+            const validDates = cleaned.map(r => r.tanggal).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+            state.minDateInData = validDates[0] || '';
+            state.maxDateInData = validDates[validDates.length - 1] || '';
+
+            // Update UI
+            updateAuditBanner();
+            populateDropdownFilters();
+            resetFiltersToDefault();
+
+            els.emptyStateSection.classList.add('hidden');
+            els.workspaceSection.classList.remove('hidden');
+
+            showToast(`Berhasil memproses ${cleaned.length.toLocaleString('id-ID')} transaksi bersih!`, 'success');
+        }
+
+        /**
+         * Memperbarui banner ringkasan audit data cleansing
+         */
+        function updateAuditBanner() {
+            els.fileNameBadge.textContent = state.fileName;
+            els.badgeRowsRaw.textContent = `${state.rawRowCount.toLocaleString('id-ID')} Baris Mentah`;
+            els.badgeRowsRemoved.textContent = `${state.removedFooterCount.toLocaleString('id-ID')} Footer/Metadata Dihapus`;
+            els.badgeSpacesFixed.textContent = `${state.whitespaceFixedCount.toLocaleString('id-ID')} Spasi Ganda Dirapikan`;
+
+            els.auditSummaryText.innerHTML = `Dari <strong>${state.rawRowCount.toLocaleString('id-ID')}</strong> baris di file sumber, sistem mengamankan <strong>${state.cleanedData.length.toLocaleString('id-ID')}</strong> transaksi valid dan menyingkirkan <strong>${state.removedFooterCount}</strong> baris non-transaksi (Total/Metadata).`;
+        }
+
+        /**
+         * Mengisi opsi dropdown Kabupaten, Saluran Distribusi, dan Gudang secara dinamis
+         */
+        function populateDropdownFilters() {
+            const getUniqueSorted = (key) => [...new Set(state.cleanedData.map(item => item[key]).filter(Boolean))].sort();
+
+            const fillSelect = (selectEl, items, defaultLabel) => {
+                selectEl.innerHTML = `<option value="">${defaultLabel}</option>`;
+                items.forEach(val => {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = val;
+                    selectEl.appendChild(opt);
+                });
+            };
+
+            fillSelect(els.filterKabupaten, getUniqueSorted('kabupaten'), 'Semua Kabupaten/Kota');
+            fillSelect(els.filterSaluran, getUniqueSorted('saluran'), 'Semua Saluran Distribusi');
+            fillSelect(els.filterGudang, getUniqueSorted('gudang'), 'Semua Gudang');
+        }
+
+        /**
+         * Mengembalikan semua filter ke kondisi awal (semua data tampil)
+         */
+        function resetFiltersToDefault() {
+            els.filterStartDate.value = state.minDateInData;
+            els.filterEndDate.value = state.maxDateInData;
+            els.filterKabupaten.value = '';
+            els.filterSaluran.value = '';
+            els.filterGudang.value = '';
+            els.filterStatusKirim.value = '';
+            els.filterSearch.value = '';
+            applyFilters();
+        }
+
+        /**
+         * Menerapkan seluruh filter aktif dan memperbarui KPI + Tabel
+         */
+        function applyFilters() {
+            const startDate = els.filterStartDate.value;
+            const endDate = els.filterEndDate.value;
+            const kab = els.filterKabupaten.value;
+            const saluran = els.filterSaluran.value;
+            const gudang = els.filterGudang.value;
+            const statusKirim = els.filterStatusKirim.value;
+            const searchQuery = els.filterSearch.value.trim().toLowerCase();
+
+            state.filteredData = state.cleanedData.filter(row => {
+                if (startDate && row.tanggal && row.tanggal < startDate) return false;
+                if (endDate && row.tanggal && row.tanggal > endDate) return false;
+                if (kab && row.kabupaten !== kab) return false;
+                if (saluran && row.saluran !== saluran) return false;
+                if (gudang && row.gudang !== gudang) return false;
+
+                if (statusKirim === 'terkirim' && row.terkirim_kg <= 0) return false;
+                if (statusKirim === 'belum' && row.terkirim_kg > 0) return false;
+
+                if (searchQuery) {
+                    const matchMitra = row.nama_mitra.toLowerCase().includes(searchQuery);
+                    const matchSO = row.nomor_so.toLowerCase().includes(searchQuery);
+                    if (!matchMitra && !matchSO) return false;
+                }
+
+                return true;
+            });
+
+            state.currentPage = 1;
+            updateKPIs();
+            renderTable();
+        }
+
+        /**
+         * Memperbarui kartu ringkasan angka (KPI) sesuai data terfilter
+         */
+        function updateKPIs() {
+            const data = state.filteredData;
+            const totalRows = data.length;
+            const uniqueMitra = new Set(data.map(r => r.nama_mitra)).size;
+
+            let totalQtySelected = 0;
+            let totalKg = 0;
+            let totalKoli = 0;
+            let totalNominal = 0;
+
+            data.forEach(r => {
+                totalQtySelected += r[state.selectedUnit] || 0;
+                totalKg += r.kuantum_kg;
+                totalKoli += r.kuantum_koli;
+                totalNominal += r.nominal_invoice;
+            });
+
+            els.kpiTotalRows.textContent = totalRows.toLocaleString('id-ID');
+            els.kpiRowsSub.textContent = `dari ${state.cleanedData.length.toLocaleString('id-ID')} total baris bersih`;
+            els.kpiUniqueMitra.textContent = uniqueMitra.toLocaleString('id-ID');
+
+            // Update label & nilai kuantitas sesuai pilihan unit
+            const unitLabels = {
+                kuantum_kg: { title: 'Total Jumlah (Kg)', header: 'Jumlah Pembelian (Kg)', sub: `Setara ${totalKoli.toLocaleString('id-ID')} Koli` },
+                kuantum_koli: { title: 'Total Jumlah (Koli)', header: 'Jumlah Pembelian (Koli)', sub: `Setara ${totalKg.toLocaleString('id-ID')} Kg` },
+                terkirim_kg: { title: 'Total Terkirim (Kg)', header: 'Jumlah Pembelian (Terkirim Kg)', sub: `Dari order ${totalKg.toLocaleString('id-ID')} Kg` }
+            };
+
+            const currentUnitMeta = unitLabels[state.selectedUnit];
+            els.kpiQtyLabel.textContent = currentUnitMeta.title;
+            els.thJumlahPembelian.textContent = currentUnitMeta.header;
+            els.kpiTotalQty.textContent = totalQtySelected.toLocaleString('id-ID');
+            els.kpiQtySub.textContent = currentUnitMeta.sub;
+
+            els.kpiTotalNominal.textContent = new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                maximumFractionDigits: 0
+            }).format(totalNominal);
+        }
+
+        /**
+         * Render tabel pratinjau dengan paginasi agar tetap ringan meski ribuan baris
+         */
+        function renderTable() {
+            const totalItems = state.filteredData.length;
+            const totalPages = Math.max(1, Math.ceil(totalItems / state.pageSize));
+            if (state.currentPage > totalPages) state.currentPage = totalPages;
+
+            const startIdx = (state.currentPage - 1) * state.pageSize;
+            const endIdx = Math.min(startIdx + state.pageSize, totalItems);
+            const slice = state.filteredData.slice(startIdx, endIdx);
+
+            els.previewTableBody.innerHTML = '';
+
+            if (totalItems === 0) {
+                els.noFilterMatchState.classList.remove('hidden');
+                els.paginationBar.classList.add('hidden');
+                return;
+            }
+
+            els.noFilterMatchState.classList.add('hidden');
+            els.paginationBar.classList.remove('hidden');
+
+            const fragment = document.createDocumentFragment();
+
+            slice.forEach((row, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-brand-50/40 transition-colors';
+
+                const qtyVal = row[state.selectedUnit] || 0;
+
+                tr.innerHTML = `
+                    <td class="py-2.5 px-4 text-center text-xs text-slate-400 font-mono">${startIdx + idx + 1}</td>
+                    <td class="py-2.5 px-4 font-mono text-xs sm:text-sm text-slate-700 whitespace-nowrap">${escapeHtml(row.tanggal)}</td>
+                    <td class="py-2.5 px-4 font-mono text-xs sm:text-sm font-medium text-slate-800 whitespace-nowrap">${escapeHtml(row.nomor_so)}</td>
+                    <td class="py-2.5 px-4 text-slate-900 font-medium">${escapeHtml(row.nama_mitra)}</td>
+                    <td class="py-2.5 px-4 text-right font-semibold text-slate-900 tabular-nums">${qtyVal.toLocaleString('id-ID')}</td>
+                    <td class="py-2 px-4">
+                        <input 
+                            type="text" 
+                            value="${escapeHtml(row.keterangan)}" 
+                            data-uid="${row._uid}"
+                            placeholder="Kosong (klik untuk isi)..."
+                            class="keterangan-input w-full px-2.5 py-1 text-xs sm:text-sm bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-brand-500 rounded-lg focus:outline-none transition"
+                        />
+                    </td>
+                `;
+                fragment.appendChild(tr);
+            });
+
+            els.previewTableBody.appendChild(fragment);
+
+            // Bind listener input Keterangan secara langsung ke objek state
+            document.querySelectorAll('.keterangan-input').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const uid = Number(e.target.getAttribute('data-uid'));
+                    const targetRow = state.cleanedData.find(item => item._uid === uid);
+                    if (targetRow) {
+                        targetRow.keterangan = e.target.value;
+                    }
+                });
+            });
+
+            // Update kontrol paginasi
+            els.paginationInfo.textContent = `Menampilkan ${(startIdx + 1).toLocaleString('id-ID')} - ${endIdx.toLocaleString('id-ID')} dari ${totalItems.toLocaleString('id-ID')} baris`;
+            els.pageIndicator.textContent = `Hal ${state.currentPage} / ${totalPages}`;
+            els.btnPrevPage.disabled = state.currentPage <= 1;
+            els.btnNextPage.disabled = state.currentPage >= totalPages;
+        }
+
+        /**
+         * Mencegah XSS saat merender string ke HTML
+         */
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        /**
+         * Membentuk array 5 kolom final persis seperti yang diminta user
+         */
+        function buildFinalExportDataset() {
+            return state.filteredData.map(row => ({
+                'Tanggal': row.tanggal,
+                'Nomor SO': row.nomor_so,
+                'Nama Mitra': row.nama_mitra,
+                'Jumlah Pembelian': row[state.selectedUnit] || 0,
+                'Keterangan': row.keterangan || ''
+            }));
+        }
+
+        /**
+         * Ekspor ke CSV
+         */
+        function exportToCSV() {
+            if (state.filteredData.length === 0) {
+                showToast('Tidak ada data untuk diekspor.', 'error');
+                return;
+            }
+            const exportRows = buildFinalExportDataset();
+            const csv = Papa.unparse(exportRows);
+            // Tambahkan BOM UTF-8 agar karakter terbaca sempurna saat dibuka langsung di Microsoft Excel
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const baseName = state.fileName.replace(/\.[^/.]+$/, '') || 'data_erp';
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${baseName}_clean_5kolom.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showToast(`Berhasil mengekspor ${exportRows.length.toLocaleString('id-ID')} baris ke CSV!`, 'success');
+        }
+
+        /**
+         * Ekspor ke Excel (.xlsx)
+         */
+        function exportToXLSX() {
+            if (state.filteredData.length === 0) {
+                showToast('Tidak ada data untuk diekspor.', 'error');
+                return;
+            }
+            const exportRows = buildFinalExportDataset();
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+
+            // Atur lebar kolom agar rapi saat dibuka di Excel
+            worksheet['!cols'] = [
+                { wch: 14 }, // Tanggal
+                { wch: 22 }, // Nomor SO
+                { wch: 36 }, // Nama Mitra
+                { wch: 18 }, // Jumlah Pembelian
+                { wch: 28 }  // Keterangan
+            ];
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Bersih');
+
+            const baseName = state.fileName.replace(/\.[^/.]+$/, '') || 'data_erp';
+            XLSX.writeFile(workbook, `${baseName}_clean_5kolom.xlsx`);
+
+            showToast(`Berhasil mengekspor ${exportRows.length.toLocaleString('id-ID')} baris ke Excel (.xlsx)!`, 'success');
+        }
+
+        /**
+         * Handler pembacaan file yang diunggah (CSV / XLSX / XLS)
+         */
+        function handleFileUpload(file) {
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            if (ext === 'csv') {
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: false,
+                    complete: function(results) {
+                        processRawRows(results.data, file.name);
+                    },
+                    error: function(err) {
+                        showToast(`Gagal membaca CSV: ${err.message}`, 'error');
+                    }
+                });
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                        processRawRows(jsonRows, file.name);
+                    } catch (err) {
+                        showToast(`Gagal memproses file Excel: ${err.message}`, 'error');
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                showToast('Format file tidak didukung. Harap unggah file .csv atau .xlsx', 'error');
+            }
+        }
+
+        /**
+         * Memuat data contoh realistis sesuai struktur ERP untuk simulasi instan
+         */
+        function loadSampleDataset() {
+            const sampleRaw = [
+                { 'Wilayah': 'Kanwil Aceh', 'Gudang': 'Gudang Siron', 'Saluran Distribusi': 'RPK', 'No SO': 'SO-2026-1001', 'Tanggal Konfirmasi SO': '02/10/2026', 'Nama Pembeli': 'RPK  UD. ABADI JAYA', 'Kabupaten/Kota': 'Banda Aceh', 'Kuantum Koli SO': 40, 'Kuantum SO': 200, 'Kuantum Terkirim': 200, 'Nominal Invoice': 2600000 },
+                { 'Wilayah': 'Kanwil Aceh', 'Gudang': 'Gudang Siron', 'Saluran Distribusi': 'RPK', 'No SO': 'SO-2026-1002', 'Tanggal Konfirmasi SO': '15/10/2026', 'Nama Pembeli': 'RPK KEDAI  KELONTONG SYIFA', 'Kabupaten/Kota': 'Aceh Besar', 'Kuantum Koli SO': 60, 'Kuantum SO': 300, 'Kuantum Terkirim': 300, 'Nominal Invoice': 3900000 },
+                { 'Wilayah': 'Kanwil Aceh', 'Gudang': 'Gudang Sabang', 'Saluran Distribusi': 'Outlet Pangan', 'No SO': 'SO-2026-1003', 'Tanggal Konfirmasi SO': '28/10/2026', 'Nama Pembeli': 'TOKO BERKAH SABANG', 'Kabupaten/Kota': 'Sabang', 'Kuantum Koli SO': 100, 'Kuantum SO': 500, 'Kuantum Terkirim': 500, 'Nominal Invoice': 6500000 },
+                { 'Wilayah': 'Kanwil Aceh', 'Gudang': 'Gudang Siron', 'Saluran Distribusi': 'Pengecer di Pasar Rakyat', 'No SO': 'SO-2026-1004', 'Tanggal Konfirmasi SO': '05/11/2026', 'Nama Pembeli': 'UD. MAKMUR SEJAHTERA', 'Kabupaten/Kota': 'Banda Aceh', 'Kuantum Koli SO': 80, 'Kuantum SO': 400, 'Kuantum Terkirim': 400, 'Nominal Invoice': 5200000 },
+                { 'Wilayah': 'Kanwil Aceh', 'Gudang': 'Gudang Siron', 'Saluran Distribusi': 'RPK', 'No SO': 'SO-2026-1005', 'Tanggal Konfirmasi SO': '12/11/2026', 'Nama Pembeli': 'RPK  UD. ABADI JAYA', 'Kabupaten/Kota': 'Banda Aceh', 'Kuantum Koli SO': 50, 'Kuantum SO': 250, 'Kuantum Terkirim': 250, 'Nominal Invoice': 3250000 },
+                { 'Wilayah': 'Kanwil Aceh', 'Gudang': 'Gudang Siron', 'Saluran Distribusi': 'RPK', 'No SO': 'SO-2026-1006', 'Tanggal Konfirmasi SO': '16/11/2026', 'Nama Pembeli': 'RPK HARAPAN BARU', 'Kabupaten/Kota': 'Aceh Besar', 'Kuantum Koli SO': 30, 'Kuantum SO': 150, 'Kuantum Terkirim': 0, 'Nominal Invoice': 1950000 },
+                // Baris footer kotor khas ekspor ERP yang otomatis dibersihkan:
+                { 'Wilayah': 'Total', 'Gudang': '', 'Saluran Distribusi': '', 'No SO': '', 'Tanggal Konfirmasi SO': '', 'Nama Pembeli': '', 'Kabupaten/Kota': '', 'Kuantum Koli SO': 360, 'Kuantum SO': 1800, 'Kuantum Terkirim': 1650, 'Nominal Invoice': 23400000 },
+                { 'Wilayah': '', 'Gudang': '', 'Saluran Distribusi': '', 'No SO': '', 'Tanggal Konfirmasi SO': '', 'Nama Pembeli': '', 'Kabupaten/Kota': '', 'Kuantum Koli SO': '', 'Kuantum SO': '', 'Kuantum Terkirim': '', 'Nominal Invoice': '' },
+                { 'Wilayah': 'Filter diterapkan: Tanggal Konfirmasi SO adalah antara 01/10/2026 dan 16/11/2026', 'Gudang': '', 'Saluran Distribusi': '', 'No SO': '', 'Tanggal Konfirmasi SO': '', 'Nama Pembeli': '', 'Kabupaten/Kota': '', 'Kuantum Koli SO': '', 'Kuantum SO': '', 'Kuantum Terkirim': '', 'Nominal Invoice': '' }
+            ];
+
+            processRawRows(sampleRaw, 'contoh_data_erp.csv');
+        }
+
+        // Event Listeners: File Inputs & Drag-and-Drop
+        els.fileInputTop.addEventListener('change', (e) => handleFileUpload(e.target.files[0]));
+        els.fileInputMain.addEventListener('change', (e) => handleFileUpload(e.target.files[0]));
+        els.btnLoadSample.addEventListener('click', loadSampleDataset);
+        els.btnLoadSampleHero.addEventListener('click', loadSampleDataset);
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            els.emptyStateSection.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                els.emptyStateSection.classList.add('border-brand-500', 'bg-brand-50/40');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            els.emptyStateSection.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                els.emptyStateSection.classList.remove('border-brand-500', 'bg-brand-50/40');
+            });
+        });
+
+        els.emptyStateSection.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files[0];
+            handleFileUpload(file);
+        });
+
+        // Event Listeners: Filter Controls
+        [
+            els.filterStartDate,
+            els.filterEndDate,
+            els.filterKabupaten,
+            els.filterSaluran,
+            els.filterGudang,
+            els.filterStatusKirim
+        ].forEach(el => el.addEventListener('change', applyFilters));
+
+        els.filterSearch.addEventListener('input', applyFilters);
+
+        els.unitSelector.addEventListener('change', (e) => {
+            state.selectedUnit = e.target.value;
+            updateKPIs();
+            renderTable();
+        });
+
+        els.btnResetFilter.addEventListener('click', () => {
+            resetFiltersToDefault();
+            showToast('Semua filter dikembalikan ke pengaturan awal.', 'info');
+        });
+
+        // Preset Tanggal Cepat
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const preset = btn.getAttribute('data-preset');
+                if (!state.maxDateInData) return;
+
+                if (preset === 'all') {
+                    els.filterStartDate.value = state.minDateInData;
+                    els.filterEndDate.value = state.maxDateInData;
+                } else if (preset === 'lastMonth') {
+                    // Ambil awal bulan dari tanggal maksimum di dataset
+                    const [y, m] = state.maxDateInData.split('-');
+                    els.filterStartDate.value = `${y}-${m}-01`;
+                    els.filterEndDate.value = state.maxDateInData;
+                } else if (preset === 'last7Days') {
+                    const maxDt = new Date(state.maxDateInData);
+                    maxDt.setDate(maxDt.getDate() - 6);
+                    els.filterStartDate.value = maxDt.toISOString().split('T')[0];
+                    els.filterEndDate.value = state.maxDateInData;
+                }
+                applyFilters();
+            });
+        });
+
+        // Pagination Listeners
+        els.pageSizeSelect.addEventListener('change', (e) => {
+            state.pageSize = Number(e.target.value);
+            state.currentPage = 1;
+            renderTable();
+        });
+
+        els.btnPrevPage.addEventListener('click', () => {
+            if (state.currentPage > 1) {
+                state.currentPage--;
+                renderTable();
+            }
+        });
+
+        els.btnNextPage.addEventListener('click', () => {
+            const totalPages = Math.ceil(state.filteredData.length / state.pageSize);
+            if (state.currentPage < totalPages) {
+                state.currentPage++;
+                renderTable();
+            }
+        });
+
+        // Export Listeners
+        els.btnExportCSV.addEventListener('click', exportToCSV);
+        els.btnExportXLSX.addEventListener('click', exportToXLSX);
+    </script>
+</body>
+</html>
